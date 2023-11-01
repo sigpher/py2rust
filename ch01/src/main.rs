@@ -1,5 +1,7 @@
 use std::{collections::HashMap, time::Duration};
 
+use scraper::{Html, Selector};
+
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
     let client = reqwest::Client::new();
@@ -29,10 +31,17 @@ async fn main() -> Result<(), reqwest::Error> {
     println!("{}", resp);
     println!("----------------------");
 
-    let url = "https://jsonplaceholder.typicode.com/albums/2/photos";
-    client.get(url).send().await?.cookies().for_each(|x| {
-        println!("{:?}", x);
-    });
+    // let url = "https://jsonplaceholder.typicode.com/albums/2/photos";
+    // client.get(url).send().await?.cookies().for_each(|x| {
+    //     println!("{:?}", x);
+    // });
 
+    let doc = Html::parse_document(&resp);
+    let selector = Selector::parse(".m-b-sm").unwrap();
+
+    for el in doc.select(&selector) {
+        println!("title:{}", el.inner_html());
+    }
     Ok(())
 }
+
