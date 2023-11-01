@@ -11,4 +11,6 @@ tokio = { version = "*", features = ["full"] }
 serde = { version = "*", features = ["derive"] }
 serde_json = "*"
 scraper = "*"
-
+url = "*"
+robotparser = "*"
+regex = "*"

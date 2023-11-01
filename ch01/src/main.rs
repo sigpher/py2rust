@@ -1,6 +1,8 @@
 use std::{collections::HashMap, time::Duration};
 
+use regex::Regex;
 use scraper::{Html, Selector};
+use url::Url;
 
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
@@ -42,6 +44,25 @@ async fn main() -> Result<(), reqwest::Error> {
     for el in doc.select(&selector) {
         println!("title:{}", el.inner_html());
     }
+    let url = Url::parse("https://httpbin.org:80/post?name=choi&age=20");
+    // url.unwrap()
+    //     .query()
+    //     .unwrap()
+    //     .splitn(2, '&')
+    //     .for_each(|x| x.splitn(2, '=').for_each(|x| println!("{x}")));
+
+    println!("{:?}", url.unwrap().port());
+    let url = Url::parse("https://www.baidu.com/").unwrap();
+    let url = &url.join("/choi").unwrap();
+    println!("{:?}", url.as_str());
+    //
+    // let robots_txt_url = Url::parse("https://www.python.org/robots.txt").unwrap();
+    //
+    // println!("{:?}", robots_txt);
+
+    let resp = reqwest::get("https://ssr1.scrape.center/").await?;
+    let body = resp.text().await?;
+    let re = Regex::new(r"<h2.*?>(.*?)</h2>").unwrap();
+
     Ok(())
 }
-
