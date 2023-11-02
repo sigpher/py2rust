@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, fs::File, io::Write, time::Duration};
 
 use regex::Regex;
 use scraper::{Html, Selector};
@@ -34,7 +34,7 @@ async fn main() -> Result<(), reqwest::Error> {
     println!("----------------------");
 
     // let url = "https://jsonplaceholder.typicode.com/albums/2/photos";
-    // client.get(url).send().await?.cookies().for_each(|x| {
+    // client.get(url).send().await?.cookies().for_each(|x| {j
     //     println!("{:?}", x);
     // });
 
@@ -64,5 +64,24 @@ async fn main() -> Result<(), reqwest::Error> {
     let body = resp.text().await?;
     let re = Regex::new(r"<h2.*?>(.*?)</h2>").unwrap();
 
+    for (_, [item]) in re.captures_iter(&body).map(|x| x.extract()) {
+        println!("{:?}", item);
+    }
+    println!("----------------");
+
+    let url = "https://scrape.center/favicon.ico";
+
+    let resp = client.get(url).send().await?;
+    let favicon = resp.bytes().await?;
+
+    let mut file = File::options()
+        // .create_new(true)
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open("fav.ico")
+        .unwrap();
+    file.write_all(&favicon).unwrap();
+    file.flush().unwrap();
     Ok(())
 }
