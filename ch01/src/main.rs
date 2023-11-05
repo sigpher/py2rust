@@ -1,6 +1,15 @@
-use std::{collections::HashMap, fs::File, io::Write, time::Duration};
+use std::{
+    collections::HashMap,
+    fs::{self, File},
+    io::{Read, Write},
+    time::Duration,
+};
 
 use regex::Regex;
+use reqwest::{
+    cookie::{self, CookieStore},
+    header::HeaderMap,
+};
 use scraper::{Html, Selector};
 use url::Url;
 
@@ -71,17 +80,54 @@ async fn main() -> Result<(), reqwest::Error> {
 
     let url = "https://scrape.center/favicon.ico";
 
-    let resp = client.get(url).send().await?;
-    let favicon = resp.bytes().await?;
+    // let resp = client.get(url).send().await?;
+    // let favicon = resp.bytes().await?;
+    //
+    // let mut file = File::options()
+    //     // .create_new(true)
+    //     .create(true)
+    //     .write(true)
+    //     .truncate(true)
+    //     .open("fav.ico")
+    //     .unwrap();
+    // file.write_all(&favicon).unwrap();
+    // file.flush().unwrap();
+    //
+    let mut headers = HeaderMap::new();
+    headers.insert("User-Agent", "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Mobile Safari/537.36 Edg/118.0.2088.76".parse().unwrap());
+    let url = "https://ssr1.scrape.center/";
 
-    let mut file = File::options()
-        // .create_new(true)
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open("fav.ico")
-        .unwrap();
-    file.write_all(&favicon).unwrap();
-    file.flush().unwrap();
+    let resp = client.get(url).headers(headers).send().await?;
+
+    println!("{:?}", resp.headers());
+    resp.cookies().for_each(|x| println!("{:?}", x));
+
+    println!("---------------");
+
+    let file_byte = fs::read("fav.ico").unwrap();
+    let body = reqwest::Body::from(file_byte);
+
+    let resp = client
+        .post("https://httpbin.org/post")
+        .body(body)
+        .send()
+        .await?;
+
+    println!("{}", resp.text().await?);
+
+    let re = Regex::new(r"[\d-]{1,}").unwrap();
+    let text = "Hello, my phone number is 010-86432100 and email is cqc@cuiqingcai.com, and my website is https://cuiqingcai.com
+";
+    let result = re.find(text).unwrap().as_str();
+    let text = "Hello 1234567 World_This is a Regex Demo";
+
+    let ret = re.captures(text).unwrap();
+    println!("{:?}", result);
+
+    let re = Regex::new(r"[A-Z]{1}[\w]{1,}").unwrap();
+    let text = "Hello 1234567 World is a Regex Demo";
+    for (_, [hello, world, regex, demo]) in re.captures_iter(text).map(|c| c.extract()) {
+        println!("{hello},{world},{regex},{demo}");
+    }
     Ok(())
 }
