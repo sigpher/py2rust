@@ -14,7 +14,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let detail_urls = parse_index(&index_html).await;
         for detail_url in &detail_urls {
             info!("detail url {:?}", &detail_url);
-            parse_detail(detail_url).await;
+            let detail_huml = scrape_detail(detail_url).await;
+            let data = parse_detail(&detail_huml).await;
+
+            info!("Get detail data {:#?}", data);
         }
         println!();
     }
@@ -59,22 +62,30 @@ async fn parse_detail(html: &str) -> FilmInfo {
     let categories_re =
         Regex::new(r#"(?ms)<button.*?category.*?<span>(.*?)</span>.*?</button>"#).unwrap();
     let published_at_re = Regex::new(r"(?ms)(\d{4}-\d{2}-\d{2})\s?上映").unwrap();
-    let drama_re = Regex::new(r#"(?ms)<div.*?drama.*?>.*?<p>.*?(.*?)</p>"#).unwrap();
+    // let drama_re = Regex::new(r#"(?ms)<div.*?drama.*?>.*?<p>.*?(.*?)</p>"#).unwrap();
+    let drama_re = Regex::new(r#"(?ms)<h3.*?>.*?</h3>.*?<p.*?>(.*?)</p>"#).unwrap();
     let score_re = Regex::new(r#"(?ms)<p.*?score.*?>(.*?)</p>"#).unwrap();
 
     let cover = cover_re.captures(html).unwrap().get(1).unwrap().as_str();
     let name = name_re.captures(html).unwrap().get(1).unwrap().as_str();
     let categories: Vec<String> = categories_re
-        .find_iter(html)
-        .map(|m| m.as_str().to_string())
+        .captures_iter(html)
+        .map(|caps| {
+            let (_, [cate]) = caps.extract();
+            cate.to_string()
+        })
         .collect();
 
-    let published_at = published_at_re
-        .captures(html)
-        .unwrap()
-        .get(1)
-        .unwrap()
-        .as_str();
+    let published_at = if published_at_re.is_match(html) {
+        published_at_re
+            .captures(html)
+            .unwrap()
+            .get(1)
+            .unwrap()
+            .as_str()
+    } else {
+        ""
+    };
     let drama = drama_re.captures(html).unwrap().get(1).unwrap().as_str();
     let score = score_re.captures(html).unwrap().get(1).unwrap().as_str();
 
@@ -83,8 +94,8 @@ async fn parse_detail(html: &str) -> FilmInfo {
         name: name.to_string(),
         categories,
         published_at: published_at.to_string(),
-        drama: drama.to_string(),
-        score: score.to_string(),
+        drama: drama.trim().to_string(),
+        score: score.trim().to_string(),
     }
 }
 
