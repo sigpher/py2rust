@@ -12,3 +12,6 @@ log = "*"
 pretty_env_logger = "*"
 tokio = { version = "*", features = ["full"] }
 env_logger = "*"
+config = "*"
+toml = "*"
+serde = { version = "*", features = ["derive"] }

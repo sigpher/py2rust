@@ -1,21 +1,22 @@
 use log::{error, info};
 use regex::Regex;
-use std::{env, error::Error};
-
-const BASE_URL: &str = "https://ssr1.scrape.center";
-const TOTAL_PAGE: u8 = 10;
+use serde::{Deserialize, Serialize};
+use std::{env, error::Error, fs};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    // setup logger configuration
     env::set_var("RUST_APP_LOG", "info");
     pretty_env_logger::init_custom_env("RUST_APP_LOG");
-    for page in 1..=TOTAL_PAGE {
+
+    let settings = Settings::get_config()?;
+    for page in 1..=settings.total_page {
         let index_html = scrape_index(&page.to_string()).await?;
-        let detail_urls = parse_index(&index_html).await;
-        for detail_url in &detail_urls {
+        let detail_urls = parse_index(&index_html).await?;
+        for detail_url in detail_urls {
             info!("detail url {:?}", &detail_url);
-            let detail_huml = scrape_detail(detail_url).await;
-            let data = parse_detail(&detail_huml).await;
+            let detail_html = scrape_detail(&detail_url);
+            let data = parse_detail(&detail_html.await).await;
 
             info!("Get detail data {:#?}", data);
         }
@@ -23,6 +24,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+#[derive(Serialize, Deserialize, Default, Debug)]
+pub struct Settings {
+    pub base_url: String,
+    pub total_page: u32,
+}
+
+impl Settings {
+    pub fn get_config() -> Result<Settings, Box<dyn Error>> {
+        let settings = toml::from_str(&fs::read_to_string("settings.toml")?)?;
+        Ok(settings)
+    }
 }
 
 async fn scrape_page(url: &str) -> Result<String, Box<dyn Error>> {
@@ -37,19 +51,21 @@ async fn scrape_page(url: &str) -> Result<String, Box<dyn Error>> {
 }
 
 async fn scrape_index(page: &str) -> Result<String, Box<dyn Error>> {
-    let index_url = format!("{BASE_URL}/page/{page}");
+    let base_url = Settings::get_config()?.base_url;
+    let index_url = format!("{base_url}/page/{page}");
     Ok(scrape_page(&index_url).await.unwrap())
 }
 
-async fn parse_index(html: &str) -> Vec<String> {
+async fn parse_index(html: &str) -> Result<Vec<String>, Box<dyn Error>> {
     let re = Regex::new(r#"<a.*?href="(.*?)".*?class="name"#).unwrap();
     let mut detail_urls: Vec<String> = Vec::new();
 
+    let base_url = Settings::get_config()?.base_url;
     for (_, [item]) in re.captures_iter(html).map(|m| m.extract()) {
-        detail_urls.push(format!("{BASE_URL}{}", item));
+        detail_urls.push(format!("{base_url}{}", item));
     }
 
-    detail_urls
+    Ok(detail_urls)
 }
 
 async fn scrape_detail(url: &str) -> String {
@@ -57,7 +73,7 @@ async fn scrape_detail(url: &str) -> String {
 }
 
 async fn parse_detail(html: &str) -> FilmInfo {
-    let cover_re = Regex::new(r#"(?ms)class="item.*?<img.*?src="(.*?)".*?class="cover">"#).unwrap();
+    let cover_re = Regex::new(r#"(?ms)class="item.*?<img.*?src="(.*?)@.*?class="cover">"#).unwrap();
     let name_re = Regex::new(r#"(?ms)<h2.*?>(.*?)</h2>"#).unwrap();
     let categories_re =
         Regex::new(r#"(?ms)<button.*?category.*?<span>(.*?)</span>.*?</button>"#).unwrap();
