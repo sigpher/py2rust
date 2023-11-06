@@ -10,17 +10,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init_custom_env("RUST_APP_LOG");
 
     let settings = Settings::get_config()?;
+    let mut fs = Vec::new();
     for page in 1..=settings.total_page {
         let index_html = scrape_index(&page.to_string()).await?;
         let detail_urls = parse_index(&index_html).await?;
         for detail_url in detail_urls {
-            info!("detail url {:?}", &detail_url);
-            let detail_html = scrape_detail(&detail_url);
-            let data = parse_detail(&detail_html.await).await;
-
-            info!("Get detail data {:#?}", data);
+            let h = tokio::spawn(async move {
+                info!("detail url {:?}", &detail_url);
+                scrape_detail(&detail_url).await;
+                let detail_html = scrape_detail(&detail_url);
+                let data = parse_detail(&detail_html.await).await;
+                info!("Get detail data {:#?}", data);
+            });
+            fs.push(h);
         }
-        println!();
+    }
+    for f in fs{
+        let _handle = tokio::join!(f);
     }
 
     Ok(())
@@ -39,6 +45,7 @@ impl Settings {
     }
 }
 
+// scrape_page: return the html body text of the page
 async fn scrape_page(url: &str) -> Result<String, Box<dyn Error>> {
     info!("scraping {url}");
     let resp = reqwest::get(url).await?;
