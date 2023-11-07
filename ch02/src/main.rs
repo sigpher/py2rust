@@ -1,7 +1,13 @@
 use log::{error, info};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::{env, error::Error, fs};
+use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
+use std::{
+    env,
+    error::Error,
+    fs,
+    sync::{Arc, Mutex},
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -10,22 +16,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init_custom_env("RUST_APP_LOG");
 
     let settings = Settings::get_config()?;
+    // let pool = SqlitePool::connect("test.db").await?;
+    let pool = Arc::new(Mutex::new(
+        SqlitePoolOptions::new()
+            .max_connections(10)
+            .connect("test.db")
+            .await?,
+    ));
+
     let mut fs = Vec::new();
     for page in 1..=settings.total_page {
         let index_html = scrape_index(&page.to_string()).await?;
         let detail_urls = parse_index(&index_html).await?;
         for detail_url in detail_urls {
+            let pool = pool.clone();
+            let pool = pool.lock().unwrap();
             let h = tokio::spawn(async move {
-                info!("detail url {:?}", &detail_url);
+                // info!("detail url {:?}", &detail_url);
                 scrape_detail(&detail_url).await;
                 let detail_html = scrape_detail(&detail_url);
                 let data = parse_detail(&detail_html.await).await;
-                info!("Get detail data {:#?}", data);
+                // info!("Get detail data {:#?}", data);
+                save_data(&pool, data);
             });
             fs.push(h);
         }
     }
-    for f in fs{
+    for f in fs {
         let _handle = tokio::join!(f);
     }
 
@@ -82,8 +99,8 @@ async fn scrape_detail(url: &str) -> String {
 async fn parse_detail(html: &str) -> FilmInfo {
     let cover_re = Regex::new(r#"(?ms)class="item.*?<img.*?src="(.*?)@.*?class="cover">"#).unwrap();
     let name_re = Regex::new(r#"(?ms)<h2.*?>(.*?)</h2>"#).unwrap();
-    let categories_re =
-        Regex::new(r#"(?ms)<button.*?category.*?<span>(.*?)</span>.*?</button>"#).unwrap();
+    // let categories_re =
+    //     Regex::new(r#"(?ms)<button.*?category.*?<span>(.*?)</span>.*?</button>"#).unwrap();
     let published_at_re = Regex::new(r"(?ms)(\d{4}-\d{2}-\d{2})\s?上映").unwrap();
     // let drama_re = Regex::new(r#"(?ms)<div.*?drama.*?>.*?<p>.*?(.*?)</p>"#).unwrap();
     let drama_re = Regex::new(r#"(?ms)<h3.*?>.*?</h3>.*?<p.*?>(.*?)</p>"#).unwrap();
@@ -91,13 +108,13 @@ async fn parse_detail(html: &str) -> FilmInfo {
 
     let cover = cover_re.captures(html).unwrap().get(1).unwrap().as_str();
     let name = name_re.captures(html).unwrap().get(1).unwrap().as_str();
-    let categories: Vec<String> = categories_re
-        .captures_iter(html)
-        .map(|caps| {
-            let (_, [cate]) = caps.extract();
-            cate.to_string()
-        })
-        .collect();
+    // let categories: Vec<String> = categories_re
+    //     .captures_iter(html)
+    //     .map(|caps| {
+    //         let (_, [cate]) = caps.extract();
+    //         cate.to_string()
+    //     })
+    //     .collect();
 
     let published_at = if published_at_re.is_match(html) {
         published_at_re
@@ -115,7 +132,7 @@ async fn parse_detail(html: &str) -> FilmInfo {
     FilmInfo {
         cover: cover.to_string(),
         name: name.to_string(),
-        categories,
+        // categories,
         published_at: published_at.to_string(),
         drama: drama.trim().to_string(),
         score: score.trim().to_string(),
@@ -126,8 +143,31 @@ async fn parse_detail(html: &str) -> FilmInfo {
 pub struct FilmInfo {
     pub cover: String,
     pub name: String,
-    pub categories: Vec<String>,
+    // pub categories: Vec<String>,
     pub published_at: String,
     pub drama: String,
     pub score: String,
+}
+
+async fn save_data(pool: SqlitePool, file_info: FilmInfo) -> anyhow::Result<i64> {
+    // let mut conn = pool.acquire().await?;
+    let mut conn = pool.acquire().await?;
+    //     let sql = r#"
+    // INSERT INTO FILMS (cover,name,categories,published_at,drama,score) VALUES (?,?,?,?,?,?)
+    //         "#;
+    let sql = r#"
+INSERT INTO FILMS (cover,name,,published_at,drama,score) VALUES (?,?,?,?,?)
+        "#;
+    let id = sqlx::query(sql)
+        .bind(file_info.cover)
+        .bind(file_info.name)
+        // .bind(file_info.categories
+        .bind(file_info.published_at)
+        .bind(file_info.drama)
+        .bind(file_info.score)
+        .execute(&mut *conn)
+        .await?
+        .last_insert_rowid();
+
+    Ok(id)
 }

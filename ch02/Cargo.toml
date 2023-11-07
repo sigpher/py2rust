@@ -15,3 +15,5 @@ env_logger = "*"
 config = "*"
 toml = "*"
 serde = { version = "*", features = ["derive"] }
+sqlx = { version = "*", features = ["runtime-tokio-rustls", "sqlite"] }
+anyhow = "*"
