@@ -1,5 +1,5 @@
 use log::{error, info};
-use regex::Regex;
+use regex::{Match, Regex};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::{env, error::Error, fs};
@@ -86,25 +86,31 @@ async fn scrape_detail(url: &str) -> String {
 }
 
 async fn parse_detail(html: &str) -> FilmInfo {
+    let name_re = Regex::new(r#"(?ms)<h2.*?>(.*?) - (.*?)</h2>"#).unwrap();
     let cover_re = Regex::new(r#"(?ms)class="item.*?<img.*?src="(.*?)@.*?class="cover">"#).unwrap();
-    let name_re = Regex::new(r#"(?ms)<h2.*?>(.*?)</h2>"#).unwrap();
-    let categories_re =
-        Regex::new(r#"(?ms)<button.*?category.*?<span>(.*?)</span>.*?</button>"#).unwrap();
+    // let categories_re =
+    //     Regex::new(r#"(?ms)<button.*?category.*?<span>(.*?)</span>.*?</button>"#).unwrap();
+    let country_re = Regex::new(
+        r#"(?ms)<div.*?class="categories".*?<div.*?class="m-v-sm info">.*?<span .*?>(.*?)</span>"#,
+    )
+    .unwrap();
     let published_at_re = Regex::new(r"(?ms)(\d{4}-\d{2}-\d{2})\s?上映").unwrap();
-    // let drama_re = Regex::new(r#"(?ms)<div.*?drama.*?>.*?<p>.*?(.*?)</p>"#).unwrap();
+    let length_re = Regex::new(r"(?ms)(\d{2,3}) 分钟").unwrap();
     let drama_re = Regex::new(r#"(?ms)<h3.*?>.*?</h3>.*?<p.*?>(.*?)</p>"#).unwrap();
     let score_re = Regex::new(r#"(?ms)<p.*?score.*?>(.*?)</p>"#).unwrap();
 
-    let cover = cover_re.captures(html).unwrap().get(1).unwrap().as_str();
     let name = name_re.captures(html).unwrap().get(1).unwrap().as_str();
-
-    let categories: Vec<String> = categories_re
-        .captures_iter(html)
-        .map(|caps| {
-            let (_, [cate]) = caps.extract();
-            cate.to_string()
-        })
-        .collect();
+    let alias = name_re.captures(html).unwrap().get(2).unwrap().as_str();
+    let cover = cover_re.captures(html).unwrap().get(1).unwrap().as_str();
+    let country = country_re.captures(html).unwrap().get(1).unwrap().as_str();
+    let length = length_re.captures(html).unwrap().get(1).unwrap().as_str();
+    // let categories: Vec<String> = categories_re
+    //     .captures_iter(html)
+    //     .map(|caps| {
+    //         let (_, [cate]) = caps.extract();
+    //         cate.to_string()
+    //     })
+    //     .collect();
 
     let published_at = if published_at_re.is_match(html) {
         published_at_re
@@ -120,8 +126,11 @@ async fn parse_detail(html: &str) -> FilmInfo {
     let score = score_re.captures(html).unwrap().get(1).unwrap().as_str();
 
     FilmInfo {
-        cover,
         name,
+        alias,
+        cover,
+        country,
+        length,
         // categories,
         published_at,
         drama: drama.trim(),
@@ -131,8 +140,11 @@ async fn parse_detail(html: &str) -> FilmInfo {
 
 #[derive(Debug, Default)]
 pub struct FilmInfo<'a> {
-    pub cover: &'a str,
     pub name: &'a str,
+    pub alias: &'a str,
+    pub cover: &'a str,
+    pub country: &'a str,
+    pub length: &'a str,
     // pub categories: Vec<String>,
     pub published_at: &'a str,
     pub drama: &'a str,
@@ -142,12 +154,15 @@ pub struct FilmInfo<'a> {
 async fn save_data<'a>(pool: SqlitePool, file_info: FilmInfo<'a>) -> anyhow::Result<()> {
     let mut conn = pool.acquire().await?;
     let sql = r#"
-INSERT INTO FILES (cover,name,published_at,drama,score) VALUES (?,?,?,?,?)
+INSERT INTO FILMS (name,alias,cover,country,length,published_at,drama,score) VALUES (?,?,?,?,?,?,?,?)
         "#;
     // let id = sqlx::query(sql)
     sqlx::query(sql)
-        .bind(file_info.cover)
         .bind(file_info.name)
+        .bind(file_info.alias)
+        .bind(file_info.cover)
+        .bind(file_info.country)
+        .bind(file_info.length)
         // .bind(file_info.categories
         .bind(file_info.published_at)
         .bind(file_info.drama)
@@ -159,4 +174,3 @@ INSERT INTO FILES (cover,name,published_at,drama,score) VALUES (?,?,?,?,?)
 
     Ok(())
 }
-
