@@ -1,20 +1,15 @@
-use std::time::Duration;
-
-use thirtyfour::{
-    prelude::{ElementQueryable, WebDriverError},
-    By, DesiredCapabilities, EdgeCapabilities, WebDriver,
-};
+use thirtyfour::prelude::*;
 
 #[tokio::main]
-async fn main() -> Result<(), WebDriverError> {
-    // let caps = EdgeCapabilities::new();
-    let caps = DesiredCapabilities::chrome();
-
+async fn main() -> WebDriverResult<()> {
+    let caps = DesiredCapabilities::edge();
     let driver = WebDriver::new("http://localhost:9515", caps).await?;
-    let url = "https://spa1.scrape.center/";
-    driver.goto(url).await?;
-    let check = driver.find(By::Css(".m-b-sm")).await?;
-    println!("{:?}", check);
+
+    // Navigate to https://wikipedia.org.
+    driver.goto("www.baidu.com").await?;
+
+    // Click the search button.
+    // Always explicitly close the browser.
     driver.quit().await?;
 
     Ok(())
